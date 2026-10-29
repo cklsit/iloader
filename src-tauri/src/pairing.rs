@@ -87,15 +87,19 @@ async fn generate_lockdown_plist(
         AppError::DeviceComsWithMessage("Failed to start lockdown session".into(), e.to_string())
     })?;
 
-    lc.set_value(
-        "EnableWifiDebugging",
-        true.into(),
-        Some("com.apple.mobile.wireless_lockdown"),
-    )
-    .await
-    .map_err(|e| {
-        AppError::LockdownPairing("Failed to enable wifi debugging".into(), e.to_string())
-    })?;
+    // Enabling wireless debugging is best-effort: it only matters for Wi-Fi installs.
+    // iOS 26.4+/27 rejects this write with "No such value", and aborting device
+    // selection there makes the device unusable over USB as well.
+    if let Err(e) = lc
+        .set_value(
+            "EnableWifiDebugging",
+            true.into(),
+            Some("com.apple.mobile.wireless_lockdown"),
+        )
+        .await
+    {
+        warn!("Failed to enable wifi debugging, continuing over USB: {e}");
+    }
 
     plist::Value::from_reader_xml(std::io::Cursor::new(pairing_file.serialize().map_err(
         |e| AppError::LockdownPairing("Failed to serialize pairing file".into(), e.to_string()),
